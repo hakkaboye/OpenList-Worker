@@ -260,7 +260,7 @@ function fetchI18n(repo) {
   const tmpTar = path.join(os.tmpdir(), `openlist-i18n-${process.pid}.tar.gz`)
   console.log(`  Fetching i18n translations: ${I18N_TAR_URL}`)
   try {
-    run(`curl -fL --retry 3 -o "${tmpTar}" "${I18N_TAR_URL}"`)
+    run(`curl -fL -k --retry 3 -o "${tmpTar}" "${I18N_TAR_URL}"`)
     run(`tar -xzf "${tmpTar}" -C "${langDir}"`)
   } catch (err) {
     console.warn(
@@ -269,8 +269,35 @@ function fetchI18n(repo) {
   } finally {
     fs.rmSync(tmpTar, { force: true })
   }
-  // 无论翻译是否下载成功，都补齐 entry.ts 与缺失翻译（与前端 build.sh 一致）
   run(`node ./scripts/i18n.mjs`, { cwd: repo })
+  // Remove zh-TW (keep en as fallback + zh-CN as default UI language)
+  for (const rl of ["zh-TW"]) {
+    const rd = path.join(langDir, rl)
+    if (fs.existsSync(rd)) {
+      fs.rmSync(rd, { recursive: true, force: true })
+      console.log(`  Removed lang: ${rl}`)
+    }
+  }
+  // Patch i18n.ts: hide en from dropdown, default to zh-CN
+  const i18nTs = path.join(repo, "src", "app", "i18n.ts")
+  if (fs.existsSync(i18nTs)) {
+    let i18nContent = fs.readFileSync(i18nTs, "utf-8")
+    // Filter en out of the languages dropdown
+    i18nContent = i18nContent.replace(
+      'export const languages = Object.keys(langs).map',
+      'export const languages = Object.keys(langs).filter((k) => !k.includes("/en/")).map'
+    )
+    // Change default fallback from en to zh-CN
+    i18nContent = i18nContent.replace(/\|\|\s*"en"/g, '|| "zh-CN"')
+    // Change locale !== "en" checks to zh-CN
+    i18nContent = i18nContent.replace(/if \(locale !== "en"\)/g, 'if (locale !== "zh-CN")')
+    // Change dynamic import of en to zh-CN
+    i18nContent = i18nContent.replace(/import\("~\/lang\/en\/entry"\)/g, 'import("~/lang/zh-CN/entry")')
+    // Change type import
+    i18nContent = i18nContent.replace('import type * as en from "~/lang/en/entry"', 'import type * as en from "~/lang/zh-CN/entry"')
+    fs.writeFileSync(i18nTs, i18nContent)
+    console.log("  Patched i18n.ts: en hidden, default -> zh-CN")
+  }
 }
 
 /** 在本地前端仓库中 install + build，并取 dist 产物 */
@@ -343,7 +370,7 @@ async function fetchPublishedDist() {
   const tgz = path.join(tmp, "pkg.tgz")
   try {
     console.log(`  Downloading published dist: ${PKG_NAME}@${version}`)
-    run(`curl -fL --retry 3 -o "${tgz}" "${tarball}"`)
+    run(`curl -fL -k --retry 3 -o "${tgz}" "${tarball}"`)
     // 以 tmp 为 cwd、用相对路径解包：Windows 上 tar 会把 "C:\\..." 里的盘符冒号
     // 当成远程主机（"Cannot connect to C: resolve failed"），不能把绝对路径喂给 tar。
     run(`tar -xzf pkg.tgz package/dist package/package.json`, { cwd: tmp })
@@ -392,7 +419,7 @@ async function main() {
   // 4. 下载 npm 上已发布且兼容 Worker 初始化协议的 dist（默认）
   //    从 main 现构建的产物哈希与 CDN 不一致，会让路径 A 失效、npmmirror 之类的
   //    镜像完全不可用（详见文件头），故默认改为取已发布产物。
-  if (process.env.FRONTEND_BUILD_FROM_SOURCE !== "1") {
+  if (true) {
     if (await fetchPublishedDist()) return
   }
 

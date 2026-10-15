@@ -103,8 +103,16 @@ export async function resolveShare(
   // Single-file share: one file has no sub-paths, so trailing segments are
   // always suspicious — reject instead of concatenating them.
   if (share.files.length === 1) {
-    if (rest.length > 0) return { ok: false, error: "path not found in share" }
-    return { ok: true, share, realPath: normalize(share.files[0]) }
+    const rootPath = normalize(share.files[0])
+    if (rest.length === 0) {
+      return { ok: true, share, realPath: rootPath }
+    }
+    // 分享的是文件夹：rest 作为相对该文件夹的路径拼到 rootPath 下
+    const sub = normalize([rootPath, ...rest].join("/"))
+    if (sub === rootPath || sub.startsWith(rootPath + "/")) {
+      return { ok: true, share, realPath: sub }
+    }
+    return { ok: false, error: "path not found in share" }
   }
 
   // Multi-file share, sub-path: match by basename

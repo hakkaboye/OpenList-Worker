@@ -10,6 +10,20 @@ import { storageErrorSummary, uiStorageError } from "./server/storage-error"
 
 const app = new Hono()
 
+// 动态 API / 下载网关响应永不缓存：防止 CF 边缘把动态响应缓存钉死。
+// 历史 bug：/api 曾被静态层兜底成 HTML 并被 CF 边缘缓存，purge 后仍 HIT，
+// 分享页 /api/fs/list 拿到旧 HTML 导致文件列表加载失败、无法下载。
+// 给这些动态路径统一发 no-store，CF 就不再缓存它们，根治复发。
+const DYNAMIC_CACHE_FREE = /^\/(api|d|sd|p|raw|dav|s3)(\/|$)/
+app.use("*", async (c, next) => {
+  await next()
+  const res = c.res
+  if (res && DYNAMIC_CACHE_FREE.test(c.req.path)) {
+    res.headers.set("Cache-Control", "no-store, private, max-age=0")
+    res.headers.set("Pragma", "no-cache")
+  }
+})
+
 /**
  * 静态资源 / SPA 壳路径：这些请求不应被存储配置错误拦截，
  * 否则前端连提示页面都加载不出来。
