@@ -23,12 +23,28 @@
 // 用户填入的值会成为该 Worker 的 Secret，后续更新不会被覆盖。
 // =============================================================================
 {
-  "name": "openlist-tsworkers",
+  "name": "openlist-worker",
   "main": "src/backend/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
+
+  // 自定义域路由(ol.709787.xyz, 通过 CF 后台绑定)
+  "routes": [
+    {
+      "pattern": "ol.709787.xyz",
+      "zone_name": "709787.xyz",
+      "custom_domain": true,
+      "enabled": true,
+      "previews_enabled": false
+    }
+  ],
+
+  // KV 命名空间(OpenList 数据存储, 已在 CF 后台创建, 填 id 复用)
+  "kv_namespaces": [
+    { "binding": "KV", "id": "2abe5a4103ab4aeba4205abf3fc44e7d" }
+  ],
 
   // ⚠️ run_worker_first 只放行 HTML 入口，不能改成 true（全量放行）：
   //   默认「资源优先」时 / 与 /index.html 由静态层直接返回，Worker 根本不会执行，
